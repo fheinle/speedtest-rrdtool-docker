@@ -126,10 +126,12 @@ def main():
             'GRAPH_FNAME', 'RRD_FNAME',
             'GRAPH_WIDTH', 'GRAPH_HEIGHT',
             'UPLOAD_MAX', 'DOWNLOAD_MAX', 'LINE_POS',
-            'TARGET_URL', 'TARGET_USER', 'TARGET_PASS'
     ):
         SETTINGS[setting] = os.environ.get(setting, DEFAULTS.get(setting))
     SETTINGS['UPLOAD_GRAPH'] = not os.environ.get('UPLOAD_GRAPH') == 'false'
+    if SETTINGS['UPLOAD_GRAPH']:
+        for upload_setting in ('TARGET_URL', 'TARGET_USER', 'TARGET_PASS'):
+            SETTINGS[upload_setting] = os.environ.get(upload_setting) 
 
     logging.basicConfig(
         level=getattr(logging, SETTINGS['LOGLEVEL'].upper()),
