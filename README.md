@@ -16,6 +16,7 @@ $ cp settings.env.sample settings.env && vi settings.env
 
 With Docker:
 
+```shell
 $ docker build -t speedchart .
 $ docker create --name speedchart -v $(pwd)/data:/data --env-file=$(pwd)/settings.env speedchart
 $ docker start speedchart
