@@ -7,6 +7,12 @@ Optionally results may be upload using `HTTP PUT` (WebDAV)
 
 [There's a German blog post explaining things more in depth](https://blog.florianheinle.de/speedtest-rrdtool-docker).
 
+## Version
+
+This is in alpha development without any versioning whatsoever. Since it's
+a hobby project to scratch an itch, sensible versioning will only start after
+some stability has been reached.
+
 ## Getting started
 
 ```shell
