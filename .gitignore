@@ -1,0 +1,4 @@
+data/
+settings.ini
+.vscode
+__pycache__
