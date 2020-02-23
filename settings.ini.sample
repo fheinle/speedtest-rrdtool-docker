@@ -1,0 +1,28 @@
+[general]
+log_level=info
+measure=false
+
+[graph]
+width=600
+height=200
+
+[graph_upload]
+enable=false
+url=
+user=
+password=
+
+[download]
+min = 600
+max = 1000
+color = 33CC00
+
+[upload]
+min = 15
+max = 50
+color = CC0033
+
+[ping]
+min = 30
+max = 200
+color = 0033CC

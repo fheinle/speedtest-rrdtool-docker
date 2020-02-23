@@ -9,6 +9,7 @@ MIT Licence
 """
 
 
+import configparser
 import datetime
 import logging
 import os
@@ -20,33 +21,16 @@ from PIL import Image
 import requests
 import speedtest
 
-DEFAULTS = dict(
-    DOWNLOAD_MIN=600,
-    DOWNLOAD_MAX=1000,
-    GRAPH_PATH='/data/',
-    GRAPH_HEIGHT=200,
-    GRAPH_WIDTH=400,
-    LINE_POS=600,
-    LOGLEVEL='info',
-    MEASURE=True,
-    PING_MIN=30,
-    PING_MAX=200,
-    RRD_FNAME='/data/speed.rrd',
-    UPLOAD_GRAPH=True,
-    UPLOAD_MIN=15,
-    UPLOAD_MAX=50,
-)
-
 
 def create_rrd_file():
     '''create the rrd database with values from settings'''
     subprocess.run(
         [
             'rrdtool', 'create',
-            SETTINGS['RRD_FNAME'],
-            'DS:ping:GAUGE:3600:0:200',
-            'DS:upload:GAUGE:3600:0:{}'.format(SETTINGS['UPLOAD_MAX']),
-            'DS:download:GAUGE:3600:0:{}'.format(SETTINGS['DOWNLOAD_MAX']),
+            RRD_FNAME,
+            'DS:ping:GAUGE:3600:0:{}'.format(SETTINGS['ping']['max']),
+            'DS:upload:GAUGE:3600:0:{}'.format(SETTINGS['upload']['max']),
+            'DS:download:GAUGE:3600:0:{}'.format(SETTINGS['download']['max']),
             'RRA:MAX:0.5:1:168'
         ]
     )
@@ -79,7 +63,7 @@ def update_rrd_file(timestamp, ping, download, upload):
     subprocess.run(
         [
             'rrdtool', 'update',
-            SETTINGS['RRD_FNAME'],
+            RRD_FNAME,
             "{ts}:{ping}:{ul}:{dl}".format(
                 ts=timestamp,
                 ping=ping,
@@ -106,13 +90,13 @@ def graph_data_set(data_set, image_fname):
         [
             'rrdtool', 'graph',
             image_fname,
-            '-w {}'.format(SETTINGS['GRAPH_WIDTH']),
-            '-h {}'.format(SETTINGS['GRAPH_HEIGHT']),
-            '-u {}'.format(SETTINGS["{}_MAX".format(data_set.upper())]),
+            '-w {}'.format(SETTINGS['graph']['width']),
+            '-h {}'.format(SETTINGS['graph']['height']),
+            '-u {}'.format(SETTINGS[data_set]['max']),
             '--start=end-1w',
-            'DEF:{}={}:{}:MAX'.format(data_set, SETTINGS['RRD_FNAME'], data_set),
-            'LINE1:{}#0000FF:{}'.format(data_set, data_set.capitalize()),
-            'HRULE:{}#FF0000'.format(SETTINGS["{}_MIN".format(data_set.upper())]),
+            'DEF:{}={}:{}:MAX'.format(data_set, RRD_FNAME, data_set),
+            'LINE1:{}#{}:{}'.format(data_set, SETTINGS[data_set]['color'], data_set.capitalize()),
+            'HRULE:{}#FF0000'.format(SETTINGS[data_set]['min'])
         ],
         stdout=subprocess.PIPE
     )
@@ -131,7 +115,7 @@ def merge_images(ping_graph, download_graph, upload_graph):
     combined_image.paste(im=download_image, box=(0,0))
     combined_image.paste(im=upload_image, box=(0, download_image.size[1]))
     combined_image.paste(im=ping_image, box=(0, ping_image.size[1] + download_image.size[1]))
-    combined_path = os.path.join(SETTINGS['GRAPH_PATH'], 'graph.png')
+    combined_path = GRAPH_FNAME
     combined_image.save(combined_path)
 
     for no_longer_needed in (ping_graph, download_graph, upload_graph):
@@ -143,51 +127,52 @@ def upload(fname):
     '''upload the graph image using HTTP PUT, i.e. using WebDAV
 
     return the HTTP status code. For NextCloud, 204 is ok '''
-    http_request = requests.put(SETTINGS['TARGET_URL'] + '/graph.png',
-        auth=(SETTINGS['TARGET_USER'], SETTINGS['TARGET_PASS']),
+    http_request = requests.put(SETTINGS['graph_upload']['url'] + '/graph.png',
+        auth=(SETTINGS['graph_upload']['user'], SETTINGS['graph_upload']['password']),
         data=open(fname, 'rb').read()
     )
     return http_request.status_code
 
 
-SETTINGS = {}
+def load_settings(settings_fname='settings.ini'):
+    '''load config settings from ini file'''
+    ini_file = configparser.ConfigParser()
+    ini_file.read('settings.ini')
 
+    # dependencies
+    # uploading needs upload settings
+    if ini_file.getboolean('graph_upload', 'enable'):
+        for setting in ('url', 'user', 'password'):
+            if not ini_file.has_option('graph_upload', setting):
+                raise RuntimeError('Uploading enabled but not all upload settings present')
+    return ini_file
+
+SETTINGS = load_settings()
+RRD_FNAME = './data/speed.rrd'
+GRAPH_FNAME = './data/graph.png'
 
 def main():
     '''when started from cli'''
-    for setting in (
-            'LOGLEVEL',
-            'GRAPH_PATH', 'RRD_FNAME',
-            'GRAPH_WIDTH', 'GRAPH_HEIGHT',
-            'UPLOAD_MAX', 'DOWNLOAD_MAX', 'PING_MAX',
-            'UPLOAD_MIN', 'DOWNLOAD_MIN', 'PING_MIN'
-    ):
-        SETTINGS[setting] = os.environ.get(setting, DEFAULTS.get(setting))
-    SETTINGS['MEASURE'] = not os.environ.get('MEASURE') == 'false'
-    SETTINGS['UPLOAD_GRAPH'] = not os.environ.get('UPLOAD_GRAPH') == 'false'
-    if SETTINGS['UPLOAD_GRAPH']:
-        for upload_setting in ('TARGET_URL', 'TARGET_USER', 'TARGET_PASS'):
-            SETTINGS[upload_setting] = os.environ.get(upload_setting)
-
+ 
     logging.basicConfig(
-        level=getattr(logging, SETTINGS['LOGLEVEL'].upper()),
+        level=getattr(logging, SETTINGS['general']['log_level'].upper()),
         format='%(asctime)s %(message)s'
     )
     main_logger = logging.getLogger('speedchart')
 
-    if not os.path.isfile(SETTINGS['RRD_FNAME']):
+    if not os.path.isfile(RRD_FNAME):
         main_logger.debug(
             "RRD file %s not found, creating",
-            SETTINGS['RRD_FNAME']
+            RRD_FNAME
         )
         create_rrd_file()
     else:
         main_logger.debug(
             "RRD file %s present, continuing",
-            SETTINGS['RRD_FNAME']
+            RRD_FNAME
         )
 
-    if SETTINGS['MEASURE']:
+    if SETTINGS.getboolean('general', 'measure'):
         main_logger.debug('Starting speedtest')
         speedtest_results = run_speedtest()
         main_logger.info(
@@ -206,7 +191,7 @@ def main():
     graph_images = graph_rrd_file()
     final_graph = merge_images(**graph_images)
 
-    if SETTINGS['UPLOAD_GRAPH']:
+    if SETTINGS.getboolean('graph_upload', 'enable'):
         main_logger.debug('Uploading graph')
         response_code = upload(final_graph)
         main_logger.debug('Upload response code: %s', response_code)
