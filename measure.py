@@ -37,6 +37,7 @@ def create_rrd_file():
         [
             'rrdtool', 'create',
             SETTINGS['RRD_FNAME'],
+            '--step=3600',
             'DS:ping:GAUGE:3600:0:200',
             'DS:upload:GAUGE:3600:0:{}'.format(SETTINGS['UPLOAD_MAX']),
             'DS:download:GAUGE:3600:0:{}'.format(SETTINGS['DOWNLOAD_MAX']),
